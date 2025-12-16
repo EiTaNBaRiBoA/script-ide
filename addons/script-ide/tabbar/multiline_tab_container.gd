@@ -37,7 +37,7 @@ var current_tab: CustomTab
 
 #region Plugin and related tab handling processing
 func _ready() -> void:
-	popup_btn.pressed.connect(on_popup_button_pressed)
+	popup_btn.pressed.connect(show_popup)
 	tab_group.pressed.connect(on_new_tab_selected)
 
 	set_process(false)
@@ -320,7 +320,7 @@ func script_order_changed() -> void:
 func set_popup(new_popup: PopupPanel) -> void:
 	popup = new_popup
 
-func on_popup_button_pressed() -> void:
+func show_popup() -> void:
 	if (popup == null):
 		return
 

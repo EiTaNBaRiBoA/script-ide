@@ -566,24 +566,32 @@ func add_to_outline_if_selected(btn: Button, action: Callable):
 		action.call()
 
 func open_quick_search_popup():
+	var pref_size: Vector2
 	if (quick_open_popup == null):
 		quick_open_popup = QUICK_OPEN_SCENE.instantiate()
 		quick_open_popup.plugin = self
 		quick_open_popup.set_unparent_when_invisible(true)
+		pref_size = Vector2(500, 400) * get_editor_scale()
+	else:
+		pref_size = quick_open_popup.size
 
-	quick_open_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect())
+	quick_open_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect(pref_size))
 
 func open_override_popup():
 	var script: Script = get_current_script()
 	if (!script):
 		return
 
+	var pref_size: Vector2
 	if (override_popup == null):
 		override_popup = OVERRIDE_SCENE.instantiate()
 		override_popup.plugin = self
 		override_popup.set_unparent_when_invisible(true)
+		pref_size = Vector2(500, 400) * get_editor_scale()
+	else:
+		pref_size = override_popup.size
 
-	override_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect())
+	override_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect(pref_size))
 
 func hide_scripts_popup():
 	if (scripts_popup != null && scripts_popup.visible):
@@ -657,22 +665,12 @@ func navigate_list(list: ItemList, index: int, amount: int):
 	list.ensure_current_is_visible()
 	list.accept_event()
 
-func get_center_editor_rect() -> Rect2i:
+func get_center_editor_rect(pref_size: Vector2) -> Rect2i:
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 
-	var size: Vector2 = Vector2(400, 500) * get_editor_scale()
-	var position: Vector2
+	var position: Vector2 = script_editor.global_position + script_editor.size / 2 - pref_size / 2
 
-	if (script_editor.get_parent().get_parent() is Window):
-		# Floating editor.
-		var window: Window = script_editor.get_parent().get_parent()
-		var window_rect: Rect2 = window.get_visible_rect()
-
-		position = window_rect.size / 2 - size / 2
-	else:
-		position = script_editor.global_position + script_editor.size / 2 - size / 2
-
-	return Rect2i(position, size)
+	return Rect2i(position, pref_size)
 
 func open_outline_popup():
 	if (get_current_script() == null):
@@ -688,9 +686,13 @@ func open_outline_popup():
 	var old_text: String = outline_filter_txt.text
 	outline_filter_txt.text = &""
 
+	var pref_size: Vector2
 	if (outline_popup == null):
 		outline_popup = PopupPanel.new()
 		outline_popup.set_unparent_when_invisible(true)
+		pref_size = Vector2(500, 400) * get_editor_scale()
+	else:
+		pref_size = outline_popup.size
 
 	var outline_initially_closed: bool = !outline_container.visible
 	if (outline_initially_closed):
@@ -700,7 +702,7 @@ func open_outline_popup():
 
 	outline_popup.popup_hide.connect(on_outline_popup_hidden.bind(outline_initially_closed, old_text, button_flags))
 
-	outline_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect())
+	outline_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect(pref_size))
 
 	update_outline()
 	outline_filter_txt.grab_focus()
@@ -726,17 +728,7 @@ func on_outline_popup_hidden(outline_initially_closed: bool, old_text: String, b
 	update_outline()
 
 func open_scripts_popup():
-	if (scripts_item_list.item_count == 0):
-		return
-
-	scripts_item_list.get_parent().reparent(scripts_popup)
-	scripts_item_list.get_parent().visible = true
-
-	if (scripts_popup.get_parent() != null):
-		scripts_popup.get_parent().remove_child(scripts_popup)
-	scripts_popup.popup_exclusive_on_parent(EditorInterface.get_script_editor(), get_center_editor_rect())
-
-	script_filter_txt.grab_focus()
+	multiline_tab_container.show_popup()
 
 func get_current_script() -> Script:
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
