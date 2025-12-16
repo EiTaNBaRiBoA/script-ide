@@ -20,6 +20,7 @@ func show_close_button():
 		close_button = create_close_button()
 
 	add_child(close_button)
+	close_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
 
 func hide_close_button():
 	if (close_button != null):
@@ -31,7 +32,6 @@ func create_close_button() -> Button:
 	close_button.flat = true
 	close_button.focus_mode = Control.FOCUS_NONE
 	close_button.pressed.connect(on_close_pressed)
-	close_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
 
 	return close_button
 
