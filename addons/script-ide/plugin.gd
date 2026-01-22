@@ -110,16 +110,16 @@ var tab_cycle_backward_shc: Shortcut
 #endregion
 
 #region Existing controls we modify
-var outline_container: Control
-var outline_parent: Control
-var script_filter_txt: LineEdit
-var scripts_item_list: ItemList
-var script_panel_split_container: VSplitContainer
+var script_editor_split_container: HSplitContainer
+var files_panel: Control
 
 var old_scripts_tab_container: TabContainer
 var old_scripts_tab_bar: TabBar
 
-var script_editor_split_container: HSplitContainer
+var script_filter_txt: LineEdit
+var scripts_item_list: ItemList
+var script_panel_split_container: VSplitContainer
+
 var old_outline: ItemList
 var outline_filter_txt: LineEdit
 var sort_btn: Button
@@ -175,8 +175,16 @@ func _enter_tree() -> void:
 
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 
+	script_editor_split_container = find_or_null(script_editor.find_children("*", "HSplitContainer", true, false))
+	files_panel = script_editor_split_container.get_child(0)
+
+	# The 'Filter Scripts' Panel
+	var upper_files_panel: Control = files_panel.get_child(0)
+	# The 'Filter Methods' Panel
+	var lower_files_panel: Control = files_panel.get_child(1)
+
 	# Change script item list visibility (based on settings).
-	scripts_item_list = find_or_null(script_editor.find_children("*", "ItemList", true, false))
+	scripts_item_list = find_or_null(upper_files_panel.find_children("*", "ItemList", true, false))
 	scripts_item_list.allow_reselect = true
 	scripts_item_list.item_selected.connect(hide_scripts_popup.unbind(1))
 	update_script_list_visibility()
@@ -184,6 +192,45 @@ func _enter_tree() -> void:
 	# Add script filter navigation.
 	script_filter_txt = find_or_null(scripts_item_list.get_parent().find_children("*", "LineEdit", true, false))
 	script_filter_txt.gui_input.connect(navigate_on_list.bind(scripts_item_list, select_script))
+
+	# Add callback when the sorting changed.
+	sort_btn = find_or_null(lower_files_panel.find_children("*", "Button", true, false))
+	sort_btn.pressed.connect(update_outline)
+
+	# Remove existing outline and add own outline.
+	old_outline = find_or_null(lower_files_panel.find_children("*", "ItemList", true, false))
+	lower_files_panel.remove_child(old_outline)
+
+	outline = ItemList.new()
+	outline.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	outline.allow_reselect = true
+	outline.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lower_files_panel.add_child(outline)
+
+	outline.item_selected.connect(scroll_outline)
+
+	# Add a filter box for all kind of members
+	filter_box = HBoxContainer.new()
+
+	engine_func_btn = create_filter_btn(engine_func_icon, ENGINE_FUNCS)
+	func_btn = create_filter_btn(func_icon, FUNCS)
+	signal_btn = create_filter_btn(signal_icon, SIGNALS)
+	export_btn = create_filter_btn(export_icon, EXPORTED)
+	property_btn = create_filter_btn(property_icon, PROPERTIES)
+	class_btn = create_filter_btn(class_icon, CLASSES)
+	constant_btn = create_filter_btn(constant_icon, CONSTANTS)
+	update_outline_button_order()
+
+	outline.get_parent().add_child(filter_box)
+	outline.get_parent().move_child(filter_box, outline.get_index())
+
+	# Add navigation to the filter and text filtering.
+	outline_filter_txt = find_or_null(lower_files_panel.find_children("*", "LineEdit", true, false))
+	outline_filter_txt.gui_input.connect(navigate_on_list.bind(outline, scroll_outline))
+	outline_filter_txt.text_changed.connect(update_outline.unbind(1))
+
+	if (is_outline_right):
+		update_outline_position()
 
 	old_scripts_tab_container = find_or_null(script_editor.find_children("*", "TabContainer", true, false))
 	old_scripts_tab_bar = old_scripts_tab_container.get_tab_bar()
@@ -208,49 +255,6 @@ func _enter_tree() -> void:
 	script_panel_split_container = scripts_item_list.get_parent().get_parent()
 	create_set_scripts_popup()
 
-	# Remove existing outline and add own outline.
-	script_editor_split_container = find_or_null(script_editor.find_children("*", "HSplitContainer", true, false))
-	outline_container = script_editor_split_container.get_child(0)
-
-	if (is_outline_right):
-		update_outline_position()
-
-	outline_parent = find_or_null(outline_container.get_children(), 1)
-	old_outline = find_or_null(outline_parent.find_children("*", "ItemList", true, false), 0)
-	outline_parent.remove_child(old_outline)
-
-	outline = ItemList.new()
-	outline.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	outline.allow_reselect = true
-	outline.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	outline_parent.add_child(outline)
-
-	outline.item_selected.connect(scroll_outline)
-
-	# Add a filter box for all kind of members
-	filter_box = HBoxContainer.new()
-
-	engine_func_btn = create_filter_btn(engine_func_icon, ENGINE_FUNCS)
-	func_btn = create_filter_btn(func_icon, FUNCS)
-	signal_btn = create_filter_btn(signal_icon, SIGNALS)
-	export_btn = create_filter_btn(export_icon, EXPORTED)
-	property_btn = create_filter_btn(property_icon, PROPERTIES)
-	class_btn = create_filter_btn(class_icon, CLASSES)
-	constant_btn = create_filter_btn(constant_icon, CONSTANTS)
-	update_outline_button_order()
-
-	outline.get_parent().add_child(filter_box)
-	outline.get_parent().move_child(filter_box, outline.get_index())
-
-	# Add navigation to the filter and text filtering.
-	outline_filter_txt = find_or_null(outline_container.find_children("*", "LineEdit", true, false), 1)
-	outline_filter_txt.gui_input.connect(navigate_on_list.bind(outline, scroll_outline))
-	outline_filter_txt.text_changed.connect(update_outline.unbind(1))
-
-	# Add callback when the sorting changed.
-	sort_btn = find_or_null(outline_container.find_children("*", "Button", true, false))
-	sort_btn.pressed.connect(update_outline)
-
 	old_scripts_tab_bar.tab_changed.connect(on_tab_changed)
 	on_tab_changed(old_scripts_tab_bar.current_tab)
 
@@ -260,15 +264,15 @@ func _exit_tree() -> void:
 	file_system.filesystem_changed.disconnect(schedule_update)
 
 	if (script_editor_split_container != null):
-		if (script_editor_split_container != outline_container.get_parent()):
-			script_editor_split_container.add_child(outline_container)
+		if (script_editor_split_container != files_panel.get_parent()):
+			script_editor_split_container.add_child(files_panel)
 
 		# Try to restore the previous split offset.
 		if (is_outline_right):
 			var split_offset: float = script_editor_split_container.get_child(1).size.x
 			script_editor_split_container.split_offset = split_offset
 
-		script_editor_split_container.move_child(outline_container, 0)
+		script_editor_split_container.move_child(files_panel, 0)
 
 		outline_filter_txt.gui_input.disconnect(navigate_on_list)
 		outline_filter_txt.text_changed.disconnect(update_outline)
@@ -276,10 +280,11 @@ func _exit_tree() -> void:
 
 		outline.item_selected.disconnect(scroll_outline)
 
+		var outline_parent: Control = outline.get_parent()
 		outline_parent.remove_child(filter_box)
 		outline_parent.remove_child(outline)
 		outline_parent.add_child(old_outline)
-		outline_parent.move_child(old_outline, 1)
+		outline_parent.move_child(old_outline, -2)
 
 		filter_box.free()
 		outline.free()
@@ -694,11 +699,11 @@ func open_outline_popup():
 	else:
 		pref_size = outline_popup.size
 
-	var outline_initially_closed: bool = !outline_container.visible
+	var outline_initially_closed: bool = !files_panel.visible
 	if (outline_initially_closed):
-		outline_container.visible = true
+		files_panel.visible = true
 
-	outline_container.reparent(outline_popup)
+	files_panel.reparent(outline_popup)
 
 	outline_popup.popup_hide.connect(on_outline_popup_hidden.bind(outline_initially_closed, old_text, button_flags))
 
@@ -711,11 +716,11 @@ func on_outline_popup_hidden(outline_initially_closed: bool, old_text: String, b
 	outline_popup.popup_hide.disconnect(on_outline_popup_hidden)
 
 	if outline_initially_closed:
-		outline_container.visible = false
+		files_panel.visible = false
 
-	outline_container.reparent(script_editor_split_container)
+	files_panel.reparent(script_editor_split_container)
 	if (!is_outline_right):
-		script_editor_split_container.move_child(outline_container, 0)
+		script_editor_split_container.move_child(files_panel, 0)
 
 	outline_filter_txt.text = old_text
 
@@ -865,9 +870,9 @@ func update_outline_position():
 		# Try to restore the previous split offset.
 		var split_offset: float = script_editor_split_container.get_child(1).size.x
 		script_editor_split_container.split_offset = split_offset
-		script_editor_split_container.move_child(outline_container, 1)
+		script_editor_split_container.move_child(files_panel, 1)
 	else:
-		script_editor_split_container.move_child(outline_container, 0)
+		script_editor_split_container.move_child(files_panel, 0)
 
 func update_script_list_visibility():
 	scripts_item_list.get_parent().visible = is_script_list_visible
