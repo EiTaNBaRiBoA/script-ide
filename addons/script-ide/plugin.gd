@@ -62,6 +62,13 @@ const OPEN_OVERRIDE_POPUP: StringName = SCRIPT_IDE + &"open_override_popup"
 const TAB_CYCLE_FORWARD: StringName = SCRIPT_IDE + &"tab_cycle_forward"
 ## Editor setting for the 'Tab cycle backward' shortcut
 const TAB_CYCLE_BACKWARD: StringName = SCRIPT_IDE + &"tab_cycle_backward"
+
+## Engine editor setting for the icon saturation, so our icons can react.
+const ICON_SATURATION: StringName = &"interface/theme/icon_saturation"
+## Engine editor setting for the show members functionality.
+const SHOW_MEMBERS: StringName = &"text_editor/script_list/show_members_overview"
+## We track the user setting, so we can restore it properly.
+var show_members: bool = true
 #endregion
 
 #region Editor settings
@@ -119,9 +126,10 @@ var old_script_type: StringName
 
 var is_script_changed: bool = false
 var file_to_navigate: String = &""
-var suppress_settings_sync: bool = false
 
 var quick_open_tween: Tween
+
+var suppress_settings_sync: bool = false
 #endregion
 
 #region Plugin Enter / Exit setup
@@ -216,6 +224,7 @@ func _enter_tree() -> void:
 func _exit_tree() -> void:
 	var file_system: EditorFileSystem = EditorInterface.get_resource_filesystem()
 	file_system.filesystem_changed.disconnect(schedule_update)
+	get_editor_settings().settings_changed.disconnect(sync_settings)
 
 	if (script_editor_split_container != null):
 		if (script_editor_split_container != files_panel.get_parent()):
@@ -270,7 +279,8 @@ func _exit_tree() -> void:
 	if (override_popup != null):
 		override_popup.free()
 
-	get_editor_settings().settings_changed.disconnect(sync_settings)
+	if (!show_members):
+		set_setting(SHOW_MEMBERS, show_members)
 #endregion
 
 #region Plugin and Shortcut processing
@@ -317,7 +327,7 @@ func _input(event: InputEvent) -> void:
 				quick_open_tween = null
 #endregion
 
-#region Icon, Settings, Shortcut initialization
+#region Settings and Shortcut initialization
 
 ## Initializes all settings.
 ## Every setting can be changed while this plugin is active, which will override them.
@@ -332,6 +342,12 @@ func init_settings():
 	is_script_tabs_singleline = get_setting(SCRIPT_TABS_SINGLELINE, is_script_tabs_singleline)
 
 	outline_order = get_outline_order()
+
+	# Users may disabled this, but with this plugin, we want to show the new Outline.
+	# So we need to reenable it, but restore the old value on exit.
+	show_members = get_setting(SHOW_MEMBERS, true)
+	if (!show_members):
+		set_setting(SHOW_MEMBERS, true)
 
 ## Initializes all shortcuts.
 ## Every shortcut can be changed while this plugin is active, which will override them.
@@ -693,9 +709,12 @@ func sync_settings():
 
 	var changed_settings: PackedStringArray = get_editor_settings().get_changed_settings()
 	for setting: String in changed_settings:
-		if (setting == "interface/theme/icon_saturation"):
+		if (setting == ICON_SATURATION):
 			outline.reset_icons()
-			continue
+		elif (setting == SHOW_MEMBERS):
+			show_members = get_setting(SHOW_MEMBERS, true)
+			if (!show_members):
+				set_setting(SHOW_MEMBERS, true)
 
 		if (!setting.begins_with(SCRIPT_IDE)):
 			continue
@@ -850,11 +869,11 @@ func get_outline_order() -> PackedStringArray:
 
 	return new_outline_order
 
-static func find_or_null(arr: Array[Node], index: int = 0) -> Node:
+static func find_or_null(arr: Array[Node]) -> Control:
 	if (arr.is_empty()):
 		push_error("""Node that is needed for Script-IDE not found.
 Plugin will not work correctly.
 This might be due to some other plugins or changes in the Engine.
 Please report this to Script-IDE, so we can figure out a fix.""")
 		return null
-	return arr[index]
+	return arr[0] as Control
