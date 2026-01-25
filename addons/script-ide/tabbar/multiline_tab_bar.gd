@@ -1,3 +1,4 @@
+## Tab bar that can show tabs in multiple lines (wrap), when there is not enough horizontal space.
 @tool
 extends PanelContainer
 

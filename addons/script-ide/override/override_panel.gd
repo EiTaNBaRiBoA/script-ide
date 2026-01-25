@@ -1,3 +1,5 @@
+## The override panel does show all functions that come from the super class (extends)
+## that can be overridden by the script this is called on.
 @tool
 extends PopupPanel
 

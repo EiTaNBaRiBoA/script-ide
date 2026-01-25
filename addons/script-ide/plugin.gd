@@ -1,23 +1,22 @@
 ## Copyright (c) 2023-present Marius Hanl under the MIT License.
 ## The editor plugin entrypoint for Script-IDE.
 ##
-## The Script Tabs and Outline modifies the code that is inside 'script_editor_plugin.cpp'.
-## That is, the structure is changed a little bit.
-## The internals of then native C++ code are therefore important in order to make this plugin work
-## without interfering with the Engine.
-## All the other functionality does not modify anything Engine related.
+## Some features interfere with the editor code that is inside 'script_editor_plugin.cpp'.
+## That is, the original structure is changed by this plugin, in order to support everything.
+## The internals of the native C++ code are therefore important in order to make this plugin work
+## without interfering with the Engine itself (and their Node's).
 ##
 ## Script-IDE does not use global class_name's in order to not clutter projects using it.
 ## Especially since this is an editor only plugin, we do not want this plugin in the final game.
-## Therefore, code that references other code inside this plugin is untyped.
+## Therefore, components that references the plugin is untyped.
 @tool
 extends EditorPlugin
 
 const BUILT_IN_SCRIPT: StringName = &"::GDScript"
 const QUICK_OPEN_INTERVAL: int = 400
 
-const MULTILINE_TAB_CONTAINER_SCENE: PackedScene = preload("tabbar/multiline_tab_container.tscn")
-const MultilineTabContainer := preload("tabbar/multiline_tab_container.gd")
+const MULTILINE_TAB_BAR: PackedScene = preload("tabbar/multiline_tab_bar.tscn")
+const MultilineTabBar := preload("tabbar/multiline_tab_bar.gd")
 
 const QUICK_OPEN_SCENE: PackedScene = preload("quickopen/quick_open_panel.tscn")
 const QuickOpenPopup := preload("quickopen/quick_open_panel.gd")
@@ -26,6 +25,7 @@ const OVERRIDE_SCENE: PackedScene = preload("override/override_panel.tscn")
 const OverridePopup := preload("override/override_panel.gd")
 
 const Outline := preload("uid://db0be00ai3tfi")
+const SplitCodeEdit := preload("uid://boy48rhhyrph")
 
 #region Settings and Shortcuts
 ## Editor setting path
@@ -112,7 +112,7 @@ var sort_btn: Button
 #region Own controls we add
 var outline: Outline
 var outline_popup: PopupPanel
-var multiline_tab_container: MultilineTabContainer
+var multiline_tab_bar: MultilineTabBar
 var scripts_popup: PopupPanel
 var quick_open_popup: QuickOpenPopup
 var override_popup: OverridePopup
@@ -210,16 +210,16 @@ func _enter_tree() -> void:
 	# When something changed, we need to sync our own tab container.
 	old_scripts_tab_container.child_order_changed.connect(notify_order_changed)
 
-	multiline_tab_container = MULTILINE_TAB_CONTAINER_SCENE.instantiate()
-	multiline_tab_container.plugin = self
-	multiline_tab_container.scripts_item_list = scripts_item_list
-	multiline_tab_container.script_filter_txt = script_filter_txt
-	multiline_tab_container.scripts_tab_container = old_scripts_tab_container
+	multiline_tab_bar = MULTILINE_TAB_BAR.instantiate()
+	multiline_tab_bar.plugin = self
+	multiline_tab_bar.scripts_item_list = scripts_item_list
+	multiline_tab_bar.script_filter_txt = script_filter_txt
+	multiline_tab_bar.scripts_tab_container = old_scripts_tab_container
 
 	tab_container_parent.add_theme_constant_override(&"separation", 0)
-	tab_container_parent.add_child(multiline_tab_container)
+	tab_container_parent.add_child(multiline_tab_bar)
 
-	multiline_tab_container.split_btn.toggled.connect(toggle_split_view.unbind(1))
+	multiline_tab_bar.split_btn.toggled.connect(toggle_split_view.unbind(1))
 	update_tabs_position()
 	update_tabs_close_button()
 	update_tabs_visibility()
@@ -277,10 +277,10 @@ func _exit_tree() -> void:
 	if (old_scripts_tab_container != null):
 		old_scripts_tab_container.child_order_changed.disconnect(notify_order_changed)
 		old_scripts_tab_container.get_parent().remove_theme_constant_override(&"separation")
-		old_scripts_tab_container.get_parent().remove_child(multiline_tab_container)
+		old_scripts_tab_container.get_parent().remove_child(multiline_tab_bar)
 
-	if (multiline_tab_container != null):
-		multiline_tab_container.free()
+	if (multiline_tab_bar != null):
+		multiline_tab_bar.free()
 		scripts_popup.free()
 
 	if (scripts_item_list != null):
@@ -454,12 +454,12 @@ func update_editor():
 	update_keywords()
 
 	if (is_script_changed):
-		multiline_tab_container.tab_changed()
+		multiline_tab_bar.tab_changed()
 		outline.tab_changed()
 		is_script_changed = false
 	else:
 		# We saved / filesystem changed. so need to update everything.
-		multiline_tab_container.update_tabs()
+		multiline_tab_bar.update_tabs()
 		outline.update()
 
 func on_tab_changed(index: int):
@@ -475,8 +475,8 @@ func on_tab_changed(index: int):
 
 		old_script_editor_base = script_editor_base
 
-	if (!multiline_tab_container.is_split()):
-		multiline_tab_container.split_btn.disabled = script_editor_base == null
+	if (!multiline_tab_bar.is_split()):
+		multiline_tab_bar.split_btn.disabled = script_editor_base == null
 
 	is_script_changed = true
 
@@ -497,30 +497,33 @@ func toggle_split_view():
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 	var split_script_editor_base: ScriptEditorBase = script_editor.get_current_editor()
 
-	if (!multiline_tab_container.is_split()):
+	if (!multiline_tab_bar.is_split()):
 		if (split_script_editor_base == null):
 			return
 
-		multiline_tab_container.set_split(true)
+		var base_editor: Control = split_script_editor_base.get_base_editor()
+		if !(base_editor is CodeEdit):
+			return
 
-		var editor: CodeEdit = split_script_editor_base.get_base_editor().duplicate()
-		editor.editable = false
+		multiline_tab_bar.set_split(true)
+
+		var editor: CodeEdit = SplitCodeEdit.new_from(base_editor)
 
 		var container: PanelContainer = PanelContainer.new()
-		container.custom_minimum_size.x = 256
+		container.custom_minimum_size.x = 200
 		container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 		container.add_child(editor)
 		tab_splitter.add_child(container)
 	else:
-		multiline_tab_container.set_split(false)
+		multiline_tab_bar.set_split(false)
 		tab_splitter.remove_child(tab_splitter.get_child(tab_splitter.get_child_count() - 1))
 
 		if (split_script_editor_base == null):
-			multiline_tab_container.split_btn.disabled = true
+			multiline_tab_bar.split_btn.disabled = true
 
 func notify_order_changed():
-	multiline_tab_container.script_order_changed()
+	multiline_tab_bar.script_order_changed()
 
 func open_quick_search_popup():
 	var pref_size: Vector2
@@ -563,7 +566,7 @@ func create_set_scripts_popup():
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 	script_editor.add_child(scripts_popup)
 
-	multiline_tab_container.set_popup(scripts_popup)
+	multiline_tab_bar.set_popup(scripts_popup)
 
 func restore_scripts_list():
 	script_filter_txt.text = &""
@@ -679,7 +682,7 @@ func on_outline_popup_hidden(outline_initially_closed: bool, old_text: String, b
 	update_outline()
 
 func open_scripts_popup():
-	multiline_tab_container.show_popup()
+	multiline_tab_bar.show_popup()
 
 func get_current_script() -> Script:
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
@@ -832,23 +835,23 @@ func sync_settings():
 				outline.update_filter_buttons()
 
 func update_selected_tab():
-	multiline_tab_container.update_selected_tab()
+	multiline_tab_bar.update_selected_tab()
 
 func update_tabs_position():
-	var tab_container_parent: Control = multiline_tab_container.get_parent()
+	var tab_container_parent: Control = multiline_tab_bar.get_parent()
 	if (is_script_tabs_top):
-		tab_container_parent.move_child(multiline_tab_container, 0)
+		tab_container_parent.move_child(multiline_tab_bar, 0)
 	else:
-		tab_container_parent.move_child(multiline_tab_container, tab_container_parent.get_child_count() - 1)
+		tab_container_parent.move_child(multiline_tab_bar, tab_container_parent.get_child_count() - 1)
 
 func update_tabs_close_button():
-	multiline_tab_container.show_close_button_always = is_script_tabs_close_button_always
+	multiline_tab_bar.show_close_button_always = is_script_tabs_close_button_always
 
 func update_tabs_visibility():
-	multiline_tab_container.visible = is_script_tabs_visible
+	multiline_tab_bar.visible = is_script_tabs_visible
 
 func update_singleline_tabs():
-	multiline_tab_container.is_singleline_tabs = is_script_tabs_singleline
+	multiline_tab_bar.is_singleline_tabs = is_script_tabs_singleline
 
 func update_outline():
 	outline.update_outline()

@@ -1,3 +1,4 @@
+## The outline shows all script members with different color coding, depending of the type.
 @tool
 extends ItemList
 
